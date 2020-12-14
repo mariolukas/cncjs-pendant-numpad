@@ -8,7 +8,7 @@ A simple pendant for using cncjs with a num pad (as Wireless/USB Input). The cod
 
 --
 
-NOTICE: Testet with LogiLink num pad  on Linux/Raspbian (Raspberry Pi).
+NOTICE: Tested with LogiLink num pad  on Linux/Raspbian (Raspberry Pi).
 (default options are set to LogiLink vendor- and productID, see description below for running with other vendors/products)
 
 --
