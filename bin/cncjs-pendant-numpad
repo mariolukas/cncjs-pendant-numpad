@@ -32,6 +32,19 @@ program
         "--access-token-lifetime <lifetime>",
         "access token lifetime in seconds or a time span string (default: 30d)",
         "30d"
+    )
+    .option(
+        "--probeoffset <offset>",
+        "offset (thickness) for Z probe",
+        '1.56'
+    )
+    .option(
+        "--vendorid <vendor>",
+        "Vendor ID of USB HID device"
+    )
+    .option(
+        "--productid <product>",
+        "Product ID of USB HID device"
     );
 
 program.parse(process.argv);
@@ -43,7 +56,10 @@ var options = {
     socketAddress: program.socketAddress,
     socketPort: program.socketPort,
     controllerType: program.controllerType,
-    accessTokenLifetime: program.accessTokenLifetime
+    accessTokenLifetime: program.accessTokenLifetime,
+    vendorid: program.vendorid,
+    productid: program.productid,
+    probeoffset: program.probeoffset
 };
 
 if (options.list) {
@@ -82,7 +98,6 @@ var kbdevent = {
     key: 0, // Normal keys
     extra: 0, // Advanced Keys or Special Keys
     repeating: 0, // If it is repating a movement
-    can_repeat: 1, // If can repeat
     move: 1, // Actually move size
     default_move: 1 // Alter by F1, F2, F3
 };
@@ -118,6 +133,7 @@ var createServer = function(options) {
             store.sender.status = data;
         });
 
+        console.log("Keyboard VID:PID is ", options.vendorId, options.productId);
         const findPath = interface =>
             hid
                 .devices()
@@ -128,7 +144,7 @@ var createServer = function(options) {
                         item.interface === interface
                 ).path;
 
-        //console.log("Keyboard HID Address:", findPath(0));
+        console.log("Keyboard HID Address:", findPath(0));
 
 
         var keyboard_main = new hid.HID(findPath(0));
@@ -146,7 +162,6 @@ var createServer = function(options) {
             kbdevent.r_meta = (bits & 128) !== 0;
             recv.shift();
             kbdevent.key = recv.shift();
-            kbdevent.repeating = 0;
             sendToController();
         });
 
@@ -155,17 +170,8 @@ var createServer = function(options) {
         function sendToController() {
             // Calculate move size modifiers
             kbdevent.move = kbdevent.default_move;
-            if (kbdevent.l_alt || kbdevent.r_alt) {
-                kbdevent.move = 0.1;
-            } else if (
-                kbdevent.l_shift ||
-                kbdevent.r_shift ||
-                kbdevent.r_meta
-            ) {
-                kbdevent.move = 10;
-            }
 
-            console.log(kbdevent.key);
+            console.log("key: ", kbdevent.key);
             switch (kbdevent.key) {
                 case 87: // +
                     socket.emit(
@@ -250,7 +256,7 @@ var createServer = function(options) {
                 case 99: // .
                     socket.emit("write", options.port, "G91;\n");
                     socket.emit("write", options.port, "G38.2 Z-10 F87\n");
-                    socket.emit("write", options.port, "G10 L20 P1 Z"+options.probeOffest+"\n");
+                    socket.emit("write", options.port, "G10 L20 P1 Z"+options.probeOffset+"\n");
                     socket.emit("write", options.port, "G91;\n");
                     socket.emit("write", options.port, "G0 Z4;\n");
                     socket.emit("write", options.port, "G90;\n");
@@ -275,33 +281,13 @@ var createServer = function(options) {
                     kbdevent.default_move = 10;
                     break;
 
-                case 42: // key: Backspace
-                    kbdevent.default_move = 10;
-                    break;
-
                 case 88: // Key: OK or Enter
-                    kbdevent.can_repeat = kbdevent.can_repeat ? 0 : 1;
+                    socket.emit("write", options.port, "$H;\n");
                 default:
                     break;
             }
 
-            if (
-                kbdevent.key &&
-                kbdevent.can_repeat &&
-                kbdevent.key != 40 && // Key: Enter / OK -- change repeat function
-                kbdevent.key != 155 // Special Key: Home -- goto Zero-working position
-            ) {
-                if (!kbdevent.repeating) {
-                    kbdevent.repeating = 1;
-                    setTimeout(sendToController, 1000);
-                } else {
-                    setTimeout(sendToController, 150);
-                }
-            } else {
-                kbdevent.repeating = 0;
-            }
-
-           // console.log(kbdevent);
+	    //console.log(kbdevent);
         }
     });
 };
